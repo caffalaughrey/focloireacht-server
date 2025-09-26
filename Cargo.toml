@@ -1,0 +1,24 @@
+[package]
+name = "focloireacht-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.7"
+bytes = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "macros"] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tower-http = { version = "0.5", features = ["trace", "compression-br"] }
+
+[features]
+default = ["lexdb", "termdb"]
+lexdb = []
+termdb = []
