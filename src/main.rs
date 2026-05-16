@@ -56,6 +56,8 @@ async fn main() -> Result<(), anyhow::Error> {
             .route("/term/en2ga", get(routes::term::en2ga))
             .route("/term/ga2en", get(routes::term::ga2en))
             .route("/term/domains", get(routes::term::domains))
+            .route("/term/domains/search", get(routes::term::domains_search))
+            .route("/term/vocab", get(routes::term::vocab))
             .route("/term/validate", get(routes::term::validate))
             .route("/term/batch", post(routes::term::batch));
     }

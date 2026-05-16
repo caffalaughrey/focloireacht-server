@@ -148,6 +148,73 @@ pub async fn domains(State(pools): State<DbPools>) -> Result<impl IntoResponse, 
     Ok(Json(DomainsResponse { domains: rows }))
 }
 
+// --- Domain search ---
+
+#[derive(Deserialize)]
+pub struct DomainSearchQuery { pub q: String, pub limit: Option<i64> }
+
+#[derive(serde::Serialize)]
+pub struct DomainSearchResponse { pub domains: Vec<DomainSearchRow> }
+
+#[derive(serde::Serialize, sqlx::FromRow)]
+pub struct DomainSearchRow { pub label: String, pub count: i64 }
+
+pub async fn domains_search(State(pools): State<DbPools>, Query(q): Query<DomainSearchQuery>) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
+    validate_key(&q.q)?;
+    let limit = q.limit.unwrap_or(20).min(100);
+    // Normalise query so callers can use & or &amp; interchangeably
+    let q_norm = q.q.replace("&amp;", "&");
+    let pattern = format!("%{}%", q_norm);
+    let rows: Vec<DomainSearchRow> = sqlx::query_as(
+        r#"SELECT REPLACE(d.label, '&amp;', '&') as label, COUNT(*) as count
+           FROM term_domains d
+           JOIN term_domain_links l ON l.domain_id = d.id
+           WHERE REPLACE(d.label, '&amp;', '&') LIKE ? AND CAST(d.label AS INTEGER) = 0
+           GROUP BY d.label
+           ORDER BY count DESC
+           LIMIT ?"#
+    ).bind(&pattern).bind(limit).fetch_all(&pools.term).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "db error"))?;
+    Ok(Json(DomainSearchResponse { domains: rows }))
+}
+
+// --- Domain vocab ---
+
+#[derive(Deserialize)]
+pub struct VocabQuery { pub domain: String, pub lang: Option<String>, pub limit: Option<i64> }
+
+#[derive(serde::Serialize, sqlx::FromRow)]
+pub struct VocabEntry { pub ga: String, pub en: String, pub pos: Option<String> }
+
+#[derive(serde::Serialize)]
+pub struct VocabResponse { pub domain: String, pub lang: String, pub count: usize, pub terms: Vec<VocabEntry> }
+
+pub async fn vocab(State(pools): State<DbPools>, Query(q): Query<VocabQuery>) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
+    validate_key(&q.domain)?;
+    let limit = q.limit.unwrap_or(200).min(500);
+    let lang = q.lang.as_deref().unwrap_or("ga");
+    if lang != "ga" && lang != "en" { return Err((StatusCode::BAD_REQUEST, "invalid lang")); }
+
+    // Normalise HTML entities on both sides so callers can use plain & or &amp;
+    let domain_norm = q.domain.replace("&amp;", "&");
+    let rows: Vec<(String, String, Option<String>)> = sqlx::query_as(
+        r#"SELECT t_ga.term, t_en.term, t_ga.pos
+           FROM term_pairs p
+           JOIN terms t_ga ON t_ga.id = p.ga_term_id
+           JOIN terms t_en ON t_en.id = p.en_term_id
+           JOIN term_domain_links l ON l.term_id = t_ga.id
+           JOIN term_domains d ON d.id = l.domain_id
+           WHERE REPLACE(d.label, '&amp;', '&') = ?
+           ORDER BY t_ga.term
+           LIMIT ?"#
+    ).bind(&domain_norm).bind(limit).fetch_all(&pools.term).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "db error"))?;
+
+    let terms: Vec<VocabEntry> = rows.into_iter().map(|(ga, en, pos)| VocabEntry { ga, en, pos }).collect();
+    let count = terms.len();
+    Ok(Json(VocabResponse { domain: q.domain, lang: lang.to_string(), count, terms }))
+}
+
+// --- Validate ---
+
 #[derive(Deserialize)]
 pub struct ValidateQuery { pub term: String, pub lang: String, pub domain: Option<String> }
 
