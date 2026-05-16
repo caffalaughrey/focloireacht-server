@@ -122,6 +122,26 @@ pub async fn post_batch(State(pools): State<DbPools>, axum::Json(body): axum::Js
     Ok(Json(LexBatchResponse { lemmas: lemma_map, variants: variant_map }))
 }
 
+// Legacy MCP-style lookup endpoint: {"q":"madra"} -> returns entries for lemma lookup_key
+#[derive(Deserialize)]
+pub struct LegacyLookupBody { pub q: String, pub limit: Option<i64> }
+
+pub async fn lookup_legacy(State(pools): State<DbPools>, Json(body): Json<LegacyLookupBody>) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
+    validate_key(&body.q)?;
+    let limit = sanitize_limit(body.limit)?;
+    let entries: Vec<EntryRow> = sqlx::query_as!(
+        EntryRow,
+        r#"SELECT id as "id!", lemma as "lemma!", pos, sort_key, lookup_key, notes_raw FROM entries WHERE lookup_key = ? LIMIT ?"#,
+        body.q,
+        limit
+    )
+    .fetch_all(&pools.lex)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "db error"))?;
+    let payloads = build_lex_payloads(&pools, entries).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "db error"))?;
+    Ok(Json(payloads))
+}
+
 async fn build_lex_payloads(pools: &DbPools, entries: Vec<EntryRow>) -> Result<Vec<LexEntryPayload>, sqlx::Error> {
     if entries.is_empty() { return Ok(vec![]); }
     let entry_ids: Vec<String> = entries.iter().map(|e| e.id.clone()).collect();
