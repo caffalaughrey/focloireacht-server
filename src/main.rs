@@ -38,6 +38,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let mut app = Router::new()
         .route("/health", get(routes::health::health))
+        .route("/healthz", get(routes::health::health))
         .route("/meta", get(routes::meta::meta));
 
     #[cfg(feature = "lexdb")]
@@ -45,7 +46,8 @@ async fn main() -> Result<(), anyhow::Error> {
         app = app
             .route("/lex/entry", get(routes::lex::get_by_lemma))
             .route("/lex/by-variant", get(routes::lex::get_by_variant))
-            .route("/lex/batch", post(routes::lex::post_batch));
+            .route("/lex/batch", post(routes::lex::post_batch))
+            .route("/api/lex/1.0/lookup", post(routes::lex::lookup_legacy));
     }
 
     #[cfg(feature = "termdb")]
@@ -54,6 +56,8 @@ async fn main() -> Result<(), anyhow::Error> {
             .route("/term/en2ga", get(routes::term::en2ga))
             .route("/term/ga2en", get(routes::term::ga2en))
             .route("/term/domains", get(routes::term::domains))
+            .route("/term/domains/search", get(routes::term::domains_search))
+            .route("/term/vocab", get(routes::term::vocab))
             .route("/term/validate", get(routes::term::validate))
             .route("/term/batch", post(routes::term::batch));
     }
