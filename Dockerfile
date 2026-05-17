@@ -9,6 +9,9 @@ RUN mkdir -p src && echo 'fn main(){}' > src/main.rs && cargo build --release ||
 # Copy full source
 COPY . .
 
+# Touch source so Cargo sees them as newer than the dummy-build artifacts
+RUN find src -name '*.rs' | xargs touch
+
 # Build with offline SQLx (uses .sqlx cache checked-in) and strip
 ENV SQLX_OFFLINE=1
 RUN cargo build --release && \
